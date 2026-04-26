@@ -194,25 +194,61 @@ def handle_private(message: pyrogram.types.messages_and_media.message.Message, c
             try: thumb = acc.download_media(msg.document.thumbs[0].file_id)
             except: thumb = None
             bot.send_document(message.chat.id, file, thumb=thumb, caption=msg.caption, caption_entities=msg.caption_entities, reply_to_message_id=message.id, progress=progress, progress_args=[message,"up"])
-            if thumb != None: os.remove(thumb)
-
-        elif "Video" == msg_type:
-            try: thumb = acc.download_media(msg.video.thumbs[0].file_id)
-            except: thumb = None
-            bot.send_video(message.chat.id, file, duration=msg.video.duration, width=msg.video.width, height=msg.video.height, thumb=thumb, caption=msg.caption, caption_entities=msg.caption_entities, reply_to_message_id=message.id, progress=progress, progress_args=[message,"up"])
-            if thumb != None: os.remove(thumb)
-
-        # ... (Baaki ke elif statements waisa hi rakhein) ...
-        # (Maine yahan space bachane ke liye baaki media types hide kiye hain, 
-        # aap apne original code wale hi use karein)
+# Updated handle_private function
+def handle_private(message: pyrogram.types.messages_and_media.message.Message, chatid: int, msgid: int):
+    try:
+        # Step 1: Chat Resolve (Session ko force karo chat dekhne ke liye)
+        try:
+            acc.get_chat(chatid)
+        except Exception:
+            # Agar direct ID se nahi khul raha, toh ek baar try/except mein ignore karo
+            pass 
+        
+        # Step 2: Message Fetch
+        msg: pyrogram.types.messages_and_media.message.Message = acc.get_messages(chatid, msgid)
+    
+    except PeerIdInvalid:
+        # Yahan Vasusen repo ka logic hai: Agar Peer ID invalid hai, toh retry karo
+        print("Peer ID Invalid aaya, retrying...")
+        try:
+            # Yahan hum ek baar manually chat fetch karke try karte hain
+            acc.get_chat(chatid)
+            msg = acc.get_messages(chatid, msgid)
+        except Exception as e:
+            bot.send_message(message.chat.id, f"**Peer ID Invalid Error!**\nIska matlab session ko yeh chat nahi mil rahi. Check karein ki aap us channel ke member hain.\nError: {e}", reply_to_message_id=message.id)
+            return
 
     except Exception as e:
-        bot.send_message(message.chat.id, f"**Upload Error**: {e}", reply_to_message_id=message.id)
+        bot.send_message(message.chat.id, f"**Error**: {e}", reply_to_message_id=message.id)
+        return
 
+    # Baaki ka logic waisa hi rahega (Download/Upload)
+    msg_type = get_message_type(msg)
+    if "Text" == msg_type:
+        bot.send_message(message.chat.id, msg.text, entities=msg.entities, reply_to_message_id=message.id)
+        return
+
+    smsg = bot.send_message(message.chat.id, '__Downloading__', reply_to_message_id=message.id)
+    dosta = threading.Thread(target=lambda:downstatus(f'{message.id}downstatus.txt',smsg),daemon=True)
+    dosta.start()
+    
+    file = acc.download_media(msg, progress=progress, progress_args=[message,"down"])
+    os.remove(f'{message.id}downstatus.txt')
+
+    upsta = threading.Thread(target=lambda:upstatus(f'{message.id}upstatus.txt',smsg),daemon=True)
+    upsta.start()
+    
+    # Send media logic (waisa hi rahega)
+    if "Document" == msg_type:
+        try: thumb = acc.download_media(msg.document.thumbs[0].file_id)
+        except: thumb = None
+        bot.send_document(message.chat.id, file, thumb=thumb, caption=msg.caption, caption_entities=msg.caption_entities, reply_to_message_id=message.id, progress=progress, progress_args=[message,"up"])
+        if thumb != None: os.remove(thumb)
+    # ... (Baaki media types yahan add karein) ...
+    
     os.remove(file)
     if os.path.exists(f'{message.id}upstatus.txt'): os.remove(f'{message.id}upstatus.txt')
     bot.delete_messages(message.chat.id,[smsg.id])
-
 
 
 # get the type of message
