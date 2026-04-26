@@ -149,7 +149,7 @@ def save(client: pyrogram.client.Client, message: pyrogram.types.messages_and_me
 
 
 # handle private
-def # handle private - Updated Version
+# handle private - Updated Version
 def handle_private(message: pyrogram.types.messages_and_media.message.Message, chatid: int, msgid: int):
     try:
         # STEP 1: Pehle chat ko force-resolve karein taaki Pyrogram usse pehchan le
