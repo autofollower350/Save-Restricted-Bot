@@ -149,62 +149,70 @@ def save(client: pyrogram.client.Client, message: pyrogram.types.messages_and_me
 
 
 # handle private
+def # handle private - Updated Version
 def handle_private(message: pyrogram.types.messages_and_media.message.Message, chatid: int, msgid: int):
-		msg: pyrogram.types.messages_and_media.message.Message = acc.get_messages(chatid,msgid)
-		msg_type = get_message_type(msg)
+    try:
+        # STEP 1: Pehle chat ko force-resolve karein taaki Pyrogram usse pehchan le
+        # Isse "Peer ID Invalid" error khatam ho jayega
+        acc.get_chat(chatid)
+    except Exception as e:
+        print(f"Chat Resolve Error: {e}")
+        bot.send_message(message.chat.id, f"**Error**: Could not access chat. Please ensure the String Session account is a member of this chat.\n\nDetails: {e}", reply_to_message_id=message.id)
+        return
 
-		if "Text" == msg_type:
-			bot.send_message(message.chat.id, msg.text, entities=msg.entities, reply_to_message_id=message.id)
-			return
+    try:
+        # STEP 2: Ab message fetch karein
+        msg: pyrogram.types.messages_and_media.message.Message = acc.get_messages(chatid, msgid)
+    except Exception as e:
+        bot.send_message(message.chat.id, f"**Error fetching message**: {e}", reply_to_message_id=message.id)
+        return
 
-		smsg = bot.send_message(message.chat.id, '__Downloading__', reply_to_message_id=message.id)
-		dosta = threading.Thread(target=lambda:downstatus(f'{message.id}downstatus.txt',smsg),daemon=True)
-		dosta.start()
-		file = acc.download_media(msg, progress=progress, progress_args=[message,"down"])
-		os.remove(f'{message.id}downstatus.txt')
+    msg_type = get_message_type(msg)
 
-		upsta = threading.Thread(target=lambda:upstatus(f'{message.id}upstatus.txt',smsg),daemon=True)
-		upsta.start()
-		
-		if "Document" == msg_type:
-			try:
-				thumb = acc.download_media(msg.document.thumbs[0].file_id)
-			except: thumb = None
-			
-			bot.send_document(message.chat.id, file, thumb=thumb, caption=msg.caption, caption_entities=msg.caption_entities, reply_to_message_id=message.id, progress=progress, progress_args=[message,"up"])
-			if thumb != None: os.remove(thumb)
+    if "Text" == msg_type:
+        bot.send_message(message.chat.id, msg.text, entities=msg.entities, reply_to_message_id=message.id)
+        return
 
-		elif "Video" == msg_type:
-			try: 
-				thumb = acc.download_media(msg.video.thumbs[0].file_id)
-			except: thumb = None
+    smsg = bot.send_message(message.chat.id, '__Downloading__', reply_to_message_id=message.id)
+    dosta = threading.Thread(target=lambda:downstatus(f'{message.id}downstatus.txt',smsg),daemon=True)
+    dosta.start()
+    
+    # Download logic
+    try:
+        file = acc.download_media(msg, progress=progress, progress_args=[message,"down"])
+        os.remove(f'{message.id}downstatus.txt')
+    except Exception as e:
+        bot.send_message(message.chat.id, f"**Download Error**: {e}", reply_to_message_id=message.id)
+        return
 
-			bot.send_video(message.chat.id, file, duration=msg.video.duration, width=msg.video.width, height=msg.video.height, thumb=thumb, caption=msg.caption, caption_entities=msg.caption_entities, reply_to_message_id=message.id, progress=progress, progress_args=[message,"up"])
-			if thumb != None: os.remove(thumb)
+    upsta = threading.Thread(target=lambda:upstatus(f'{message.id}upstatus.txt',smsg),daemon=True)
+    upsta.start()
+    
+    # Send media logic
+    try:
+        if "Document" == msg_type:
+            try: thumb = acc.download_media(msg.document.thumbs[0].file_id)
+            except: thumb = None
+            bot.send_document(message.chat.id, file, thumb=thumb, caption=msg.caption, caption_entities=msg.caption_entities, reply_to_message_id=message.id, progress=progress, progress_args=[message,"up"])
+            if thumb != None: os.remove(thumb)
 
-		elif "Animation" == msg_type:
-			bot.send_animation(message.chat.id, file, reply_to_message_id=message.id)
-			   
-		elif "Sticker" == msg_type:
-			bot.send_sticker(message.chat.id, file, reply_to_message_id=message.id)
+        elif "Video" == msg_type:
+            try: thumb = acc.download_media(msg.video.thumbs[0].file_id)
+            except: thumb = None
+            bot.send_video(message.chat.id, file, duration=msg.video.duration, width=msg.video.width, height=msg.video.height, thumb=thumb, caption=msg.caption, caption_entities=msg.caption_entities, reply_to_message_id=message.id, progress=progress, progress_args=[message,"up"])
+            if thumb != None: os.remove(thumb)
 
-		elif "Voice" == msg_type:
-			bot.send_voice(message.chat.id, file, caption=msg.caption, thumb=thumb, caption_entities=msg.caption_entities, reply_to_message_id=message.id, progress=progress, progress_args=[message,"up"])
+        # ... (Baaki ke elif statements waisa hi rakhein) ...
+        # (Maine yahan space bachane ke liye baaki media types hide kiye hain, 
+        # aap apne original code wale hi use karein)
 
-		elif "Audio" == msg_type:
-			try:
-				thumb = acc.download_media(msg.audio.thumbs[0].file_id)
-			except: thumb = None
-				
-			bot.send_audio(message.chat.id, file, caption=msg.caption, caption_entities=msg.caption_entities, reply_to_message_id=message.id, progress=progress, progress_args=[message,"up"])   
-			if thumb != None: os.remove(thumb)
+    except Exception as e:
+        bot.send_message(message.chat.id, f"**Upload Error**: {e}", reply_to_message_id=message.id)
 
-		elif "Photo" == msg_type:
-			bot.send_photo(message.chat.id, file, caption=msg.caption, caption_entities=msg.caption_entities, reply_to_message_id=message.id)
+    os.remove(file)
+    if os.path.exists(f'{message.id}upstatus.txt'): os.remove(f'{message.id}upstatus.txt')
+    bot.delete_messages(message.chat.id,[smsg.id])
 
-		os.remove(file)
-		if os.path.exists(f'{message.id}upstatus.txt'): os.remove(f'{message.id}upstatus.txt')
-		bot.delete_messages(message.chat.id,[smsg.id])
 
 
 # get the type of message
