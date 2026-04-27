@@ -227,25 +227,63 @@ def handle_private(message: pyrogram.types.messages_and_media.message.Message, c
     if "Text" == msg_type:
         bot.send_message(message.chat.id, msg.text, entities=msg.entities, reply_to_message_id=message.id)
         return
+def handle_private(message, chatid, msgid):
+    try:
+        # Step 1: Chat Resolve (Session ko force karo chat dekhne ke liye)
+        try:
+            acc.get_chat(chatid)
+        except Exception:
+            pass 
+        
+        # Step 2: Message Fetch
+        msg = acc.get_messages(chatid, msgid)
+    
+    except PeerIdInvalid:
+        print("Peer ID Invalid aaya, retrying...")
+        try:
+            acc.get_chat(chatid)
+            msg = acc.get_messages(chatid, msgid)
+        except Exception as e:
+            bot.send_message(message.chat.id, f"**Peer ID Invalid Error!**\nSession ko chat nahi mili. Check karein ki aap us channel ke member hain.\nError: {e}", reply_to_message_id=message.id)
+            return
+    except Exception as e:
+        bot.send_message(message.chat.id, f"**Error**: {e}", reply_to_message_id=message.id)
+        return
+
+    # Download aur Upload Logic
+    msg_type = get_message_type(msg)
+    if "Text" == msg_type:
+        bot.send_message(message.chat.id, msg.text, entities=msg.entities, reply_to_message_id=message.id)
+        return
 
     smsg = bot.send_message(message.chat.id, '__Downloading__', reply_to_message_id=message.id)
     dosta = threading.Thread(target=lambda:downstatus(f'{message.id}downstatus.txt',smsg),daemon=True)
     dosta.start()
     
-    file = acc.download_media(msg, progress=progress, progress_args=[message,"down"])
-    os.remove(f'{message.id}downstatus.txt')
+    try:
+        file = acc.download_media(msg, progress=progress, progress_args=[message,"down"])
+        os.remove(f'{message.id}downstatus.txt')
+    except Exception as e:
+        bot.send_message(message.chat.id, f"**Download Error**: {e}", reply_to_message_id=message.id)
+        return
 
     upsta = threading.Thread(target=lambda:upstatus(f'{message.id}upstatus.txt',smsg),daemon=True)
     upsta.start()
     
-    # Send media logic (waisa hi rahega)
-    if "Document" == msg_type:
-        try: thumb = acc.download_media(msg.document.thumbs[0].file_id)
-        except: thumb = None
-        bot.send_document(message.chat.id, file, thumb=thumb, caption=msg.caption, caption_entities=msg.caption_entities, reply_to_message_id=message.id, progress=progress, progress_args=[message,"up"])
-        if thumb != None: os.remove(thumb)
-    # ... (Baaki media types yahan add karein) ...
-    
+    try:
+        if "Document" == msg_type:
+            try: thumb = acc.download_media(msg.document.thumbs[0].file_id)
+            except: thumb = None
+            bot.send_document(message.chat.id, file, thumb=thumb, caption=msg.caption, caption_entities=msg.caption_entities, reply_to_message_id=message.id, progress=progress, progress_args=[message,"up"])
+            if thumb != None: os.remove(thumb)
+        elif "Video" == msg_type:
+            try: thumb = acc.download_media(msg.video.thumbs[0].file_id)
+            except: thumb = None
+            bot.send_video(message.chat.id, file, duration=msg.video.duration, width=msg.video.width, height=msg.video.height, thumb=thumb, caption=msg.caption, caption_entities=msg.caption_entities, reply_to_message_id=message.id, progress=progress, progress_args=[message,"up"])
+            if thumb != None: os.remove(thumb)
+    except Exception as e:
+        bot.send_message(message.chat.id, f"**Upload Error**: {e}", reply_to_message_id=message.id)
+
     os.remove(file)
     if os.path.exists(f'{message.id}upstatus.txt'): os.remove(f'{message.id}upstatus.txt')
     bot.delete_messages(message.chat.id,[smsg.id])
