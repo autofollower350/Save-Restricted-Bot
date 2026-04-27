@@ -227,6 +227,7 @@ def handle_private(message: pyrogram.types.messages_and_media.message.Message, c
     if "Text" == msg_type:
         bot.send_message(message.chat.id, msg.text, entities=msg.entities, reply_to_message_id=message.id)
         return
+		
 def handle_private(message, chatid, msgid):
     try:
         # Step 1: Chat Resolve (Session ko force karo chat dekhne ke liye)
